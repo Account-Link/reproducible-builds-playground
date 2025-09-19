@@ -53,8 +53,8 @@ sed -i "s/DEBIAN_SNAPSHOT: \"\"/DEBIAN_SNAPSHOT: \"$SNAPSHOT_DATE\"/" "$COMPOSE_
 
 BUILD_ARGS="--build-arg SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH --build-arg DEBIAN_SNAPSHOT=$SNAPSHOT_DATE"
 
-# Build twice for determinism verification
-echo "🔨 Building image (build 1)"
+# Build once, then use verify script for determinism check
+echo "🔨 Building image (initial build)"
 docker builder prune -af >/dev/null
 SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" docker buildx build \
   $BUILD_ARGS \
@@ -64,25 +64,39 @@ SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" docker buildx build \
 
 HASH1=$(sha256sum "$OUTPUT_DIR/simple-app-build1.tar" | awk '{print $1}')
 
-echo "🔨 Building image (build 2)"
-docker builder prune -af >/dev/null
-SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" docker buildx build \
-  $BUILD_ARGS \
-  -f "$OUTPUT_DIR/simple-app/Dockerfile" \
-  --output type=oci,dest="$OUTPUT_DIR/simple-app-build2.tar",rewrite-timestamp=true \
-  "$OUTPUT_DIR/simple-app"
+# Generate build manifest first (with initial status)
+cat > "$OUTPUT_DIR/build-manifest.json" << EOF
+{
+  "tag": "${TAG}",
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "git_commit": "$(if git rev-parse --verify HEAD >/dev/null 2>&1; then git rev-parse HEAD; else echo "no-commits"; fi)",
+  "build_parameters": {
+    "source_date_epoch": "$SOURCE_DATE_EPOCH",
+    "debian_snapshot": "$SNAPSHOT_DATE",
+    "base_image": "$BASE_IMG"
+  },
+  "expected_hash": "$HASH1",
+  "verification": {
+    "status": "PENDING"
+  },
+  "dstack_info": {
+    "app_compose_file": "app-compose-generated.json",
+    "docker_compose_file": "docker-compose.yml",
+    "note": "app-compose hash computed server-side by DStack during deployment"
+  }
+}
+EOF
 
-HASH2=$(sha256sum "$OUTPUT_DIR/simple-app-build2.tar" | awk '{print $1}')
-
-# Verify determinism
 echo ""
 echo "=========================================="
 echo "DETERMINISTIC BUILD VERIFICATION"
 echo "=========================================="
-echo "Build 1: $HASH1"
-echo "Build 2: $HASH2"
+echo "Initial build: $HASH1"
+echo "Running verification build to check determinism..."
+echo ""
 
-if [[ "$HASH1" == "$HASH2" ]]; then
+# Use verify script to check determinism
+if ./scripts/verify-build.sh "$OUTPUT_DIR/build-manifest.json"; then
   echo "✅ DETERMINISTIC"
   STATUS="DETERMINISTIC"
 else
@@ -90,7 +104,10 @@ else
   STATUS="NON-DETERMINISTIC"
 fi
 
-# Generate deployment compose and app-compose hash (only if deterministic)
+# Update build manifest with final status
+jq ".verification.status = \"$STATUS\"" "$OUTPUT_DIR/build-manifest.json" > "$OUTPUT_DIR/build-manifest.tmp" && mv "$OUTPUT_DIR/build-manifest.tmp" "$OUTPUT_DIR/build-manifest.json"
+
+# Generate deployment artifacts (only if deterministic)
 if [[ "$STATUS" == "DETERMINISTIC" ]]; then
   echo ""
   echo "🏗️  Generating deployment artifacts..."
@@ -110,29 +127,6 @@ if [[ "$STATUS" == "DETERMINISTIC" ]]; then
   # The salt is randomly generated, so we cannot predict the hash locally
   echo "📄 Deployment compose ready for DStack (hash will be computed server-side)"
 fi
-
-# Generate build manifest
-cat > "$OUTPUT_DIR/build-manifest.json" << EOF
-{
-  "tag": "${TAG}",
-  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "git_commit": "$(if git rev-parse --verify HEAD >/dev/null 2>&1; then git rev-parse HEAD; else echo "no-commits"; fi)",
-  "build_parameters": {
-    "source_date_epoch": "$SOURCE_DATE_EPOCH",
-    "debian_snapshot": "$SNAPSHOT_DATE",
-    "base_image": "$BASE_IMG"
-  },
-  "expected_hash": "$HASH1",
-  "verification": {
-    "status": "$STATUS"
-  },
-  "dstack_info": {
-    "app_compose_file": "app-compose-generated.json",
-    "docker_compose_file": "docker-compose.yml",
-    "note": "app-compose hash computed server-side by DStack during deployment"
-  }
-}
-EOF
 
 echo ""
 if [[ "$STATUS" == "DETERMINISTIC" ]]; then

@@ -144,12 +144,13 @@ This environment is designed for experimentation. Try breaking determinism to un
    ./scripts/extract-and-compare.sh builds/*/build1.tar builds/*/build2.tar
    ```
 
-2. **Remove npm cache cleanup** - Comment out `rm -rf /npm-cache`:
+2. **Remove npm cache cleanup** - Comment out `rm -rf /npm-cache` in `simple-app/Dockerfile`:
    ```bash
    # Comment out: rm -rf /npm-cache
-   ./scripts/build-deterministic.sh  # Will fail determinism check
-   ./scripts/compare-layer-contents.sh /tmp/build1 /tmp/build2  # See npm cache differences
+   ./scripts/build-deterministic.sh  # Will fail determinism check with --no-cache verification
    ```
+
+   **Note**: The build script uses `--no-cache` during verification to catch non-determinism that Docker layer caching would otherwise hide. This ensures the verification step rebuilds from scratch and detects issues like leftover npm cache files.
 
 3. **Skip timestamp normalization** - Remove the `find /app -exec touch` command:
    ```bash
@@ -165,6 +166,25 @@ This environment is designed for experimentation. Try breaking determinism to un
    ```bash
    docker build -t test-no-rewrite .  # Layer timestamps will vary
    ```
+
+### 🎯 How Verification Catches Non-Determinism
+
+The build system uses a two-phase approach to detect non-deterministic builds:
+
+1. **Initial build**: Creates the image with normal Docker caching for efficiency
+2. **Verification with `--no-cache`**: Rebuilds from scratch to catch non-determinism that caching would hide
+
+This approach is critical because:
+- **Same-machine builds** often appear deterministic due to Docker layer caching
+- **`--no-cache` verification** forces fresh package downloads and rebuilds, exposing issues like:
+  - Leftover npm cache files
+  - Inconsistent apt package states
+  - Timestamp variations
+  - Network-dependent package resolution
+
+**Example**: Commenting out `rm -rf /npm-cache` will:
+- ✅ Pass on cached builds (appears deterministic)
+- ❌ Fail on `--no-cache` verification (reveals true non-determinism)
 
 ### 🔍 Analysis Workflow
 

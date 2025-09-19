@@ -55,10 +55,11 @@ BUILD_ARGS="--build-arg SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH --build-arg DEBIAN_
 echo "[verify] Clearing Docker build cache"
 docker builder prune -af >/dev/null
 
-# Rebuild with identical parameters
-echo "[verify] Rebuilding with identical parameters"
+# Rebuild with identical parameters (no cache to catch non-determinism)
+echo "[verify] Rebuilding with identical parameters (no cache)"
 SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" docker buildx build \
   $BUILD_ARGS \
+  --no-cache \
   -f "$TEMP_DIR/simple-app/Dockerfile" \
   --output type=oci,dest="$ROOT/verify-simple-app.tar",rewrite-timestamp=true \
   "$TEMP_DIR/simple-app"
