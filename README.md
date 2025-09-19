@@ -47,7 +47,8 @@ The following steps are ESSENTIAL for achieving reproducible builds. Remove any 
 
 2. **Fixed Debian Snapshots**: All apt packages from specific point-in-time
    ```dockerfile
-   RUN echo "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT} bookworm main" > /etc/apt/sources.list
+   RUN echo "deb http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT} bookworm main" > /etc/apt/sources.list && \
+       apt-get -o Acquire::Check-Valid-Until=false update
    ```
 
 3. **Exact Package Versions**: No version ranges anywhere
@@ -66,7 +67,7 @@ The following steps are ESSENTIAL for achieving reproducible builds. Remove any 
 5. **npm Cache Cleanup**: Remove npm cache completely
    ```dockerfile
    RUN mkdir -p /npm-cache && \
-       npm ci --omit=dev --ignore-scripts --prefer-offline && \
+       npm ci --omit=dev --ignore-scripts && \
        rm -rf /npm-cache
    ```
 

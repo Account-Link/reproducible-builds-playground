@@ -9,16 +9,11 @@ ARG DEBIAN_SNAPSHOT
 
 ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} \
     TZ=UTC \
-    NPM_CONFIG_FUND=false \
-    NPM_CONFIG_AUDIT=false \
-    NPM_CONFIG_PROGRESS=false \
-    NPM_CONFIG_LOGLEVEL=error \
-    NPM_CONFIG_USERCONFIG=/dev/null \
     npm_config_cache=/npm-cache
 
-RUN echo "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT} bookworm main" > /etc/apt/sources.list && \
-    echo "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT} bookworm-updates main" >> /etc/apt/sources.list && \
-    echo "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT} bookworm-security main" >> /etc/apt/sources.list && \
+RUN echo "deb http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT} bookworm main" > /etc/apt/sources.list && \
+    echo "deb http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT} bookworm-updates main" >> /etc/apt/sources.list && \
+    echo "deb http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT} bookworm-security main" >> /etc/apt/sources.list && \
     apt-get -o Acquire::Check-Valid-Until=false update && \
     apt-get install -y --no-install-recommends curl=7.88.1-10+deb12u14 && \
     rm -rf /var/lib/apt/lists/* && \
@@ -31,7 +26,7 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 RUN mkdir -p /npm-cache && \
-    npm ci --omit=dev --ignore-scripts --prefer-offline --no-audit --fund=false && \
+    npm ci --omit=dev --ignore-scripts && \
     find /app -exec touch -d "@${SOURCE_DATE_EPOCH}" {} + && \
     rm -rf /npm-cache
 
