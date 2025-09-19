@@ -30,8 +30,9 @@ SEED="${SNAPSHOT_DATE:-$(date -u -d "$CREATED + 3 days" +%Y%m%dT%H%M%SZ)}"
 echo "📅 Base image: $BASE_IMG (created: $CREATED)"
 echo "📅 Snapshot seed: $SEED"
 
-# Find working Debian snapshot
-SNAPSHOT_DATE=$(scripts/simple-probe-snapshot.sh "$SEED" | awk -F= '/SNAPSHOT_DATE/{print $2}')
+# Find working Debian snapshot using smart probe
+echo "🔍 Finding working Debian snapshot..."
+SNAPSHOT_DATE=$(scripts/smart-probe-snapshot.sh "$SEED" | awk -F= '/SNAPSHOT_DATE/{print $2}')
 [[ -n "${SNAPSHOT_DATE:-}" ]] || { echo "❌ Could not determine SNAPSHOT_DATE"; exit 1; }
 
 # Calculate SOURCE_DATE_EPOCH
@@ -56,6 +57,8 @@ BUILD_ARGS="--build-arg SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH --build-arg DEBIAN_
 # Build once, then use verify script for determinism check
 echo "🔨 Building image (initial build)"
 docker builder prune -af >/dev/null
+
+# First build with rewrite-timestamp to OCI for deterministic hash
 SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" docker buildx build \
   $BUILD_ARGS \
   -f "$OUTPUT_DIR/simple-app/Dockerfile" \
@@ -63,6 +66,14 @@ SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" docker buildx build \
   "$OUTPUT_DIR/simple-app"
 
 HASH1=$(sha256sum "$OUTPUT_DIR/simple-app-build1.tar" | awk '{print $1}')
+
+# Also build and load into Docker for easy pushing
+SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" docker buildx build \
+  $BUILD_ARGS \
+  -f "$OUTPUT_DIR/simple-app/Dockerfile" \
+  --load \
+  --tag "simple-det-app:$HASH1" \
+  "$OUTPUT_DIR/simple-app"
 
 # Generate build manifest
 cat > "$OUTPUT_DIR/build-manifest.json" << EOF

@@ -39,6 +39,9 @@ if [[ ! -f "$BUILD_TAR" ]]; then
   exit 1
 fi
 
+# Use the pre-built image tagged with hash
+SOURCE_IMAGE="simple-det-app:$IMAGE_HASH"
+
 # Generate image name with deterministic tag
 IMAGE_NAME="simple-det-app"
 if [[ "$REGISTRY" != "docker.io" ]]; then
@@ -52,22 +55,18 @@ fi
 
 echo "🏷️  Image: $FULL_IMAGE"
 
-# Load the deterministic build into Docker
-echo "📥 Loading deterministic build into Docker..."
-docker load -i "$BUILD_TAR"
-
-# Get the loaded image ID from the tar
-LOADED_IMAGE=$(docker load -i "$BUILD_TAR" 2>&1 | grep "Loaded image" | awk '{print $3}' || echo "")
-if [[ -z "$LOADED_IMAGE" ]]; then
-  echo "❌ Failed to determine loaded image ID"
+# Check if the source image exists
+if ! docker image inspect "$SOURCE_IMAGE" >/dev/null 2>&1; then
+  echo "❌ Source image not found: $SOURCE_IMAGE"
+  echo "💡 Run build-deterministic.sh first"
   exit 1
 fi
 
-echo "✅ Loaded image: $LOADED_IMAGE"
+echo "✅ Found source image: $SOURCE_IMAGE"
 
 # Tag the image for registry push
 echo "🏷️  Tagging image for registry..."
-docker tag "$LOADED_IMAGE" "$FULL_IMAGE"
+docker tag "$SOURCE_IMAGE" "$FULL_IMAGE"
 
 # Push to registry
 echo "📤 Pushing to registry..."

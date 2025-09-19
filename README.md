@@ -93,7 +93,7 @@ The following steps are ESSENTIAL for achieving reproducible builds. Remove any 
 **Deterministic Build Scripts:**
 - `scripts/build-deterministic.sh` - Core build script with verification
 - `scripts/verify-build.sh` - Independent verification script
-- `scripts/simple-probe-snapshot.sh` - Finds working Debian snapshot dates
+- `scripts/smart-probe-snapshot.sh` - Intelligently finds working Debian snapshot dates and package versions
 - `scripts/test-remote.sh` - Tests verification on remote machines
 
 **Differential Analysis Tools:**
@@ -143,7 +143,7 @@ This environment is designed for experimentation. Try breaking determinism to un
    ```bash
    # Comment out: rm -rf /var/cache/ldconfig/aux-cache && rm -rf /var/log/apt/* && rm -rf /var/log/dpkg.log
    ./scripts/build-deterministic.sh  # Will fail determinism check
-   ./scripts/extract-and-compare.sh builds/*/build1.tar builds/*/build2.tar
+   ./diff-tools/extract-and-compare.sh builds/*/simple-app-build1.tar verify-simple-app.tar
    ```
 
 2. **Remove npm cache cleanup** - Comment out `rm -rf /npm-cache` in `simple-app/Dockerfile`:
@@ -192,8 +192,8 @@ This approach is critical because:
 
 When experiments fail determinism:
 
-1. **Extract both builds**: `./diff-tools/extract-and-compare.sh build1.tar build2.tar`
-2. **Compare layer contents**: `./diff-tools/compare-layer-contents.sh /tmp/build1 /tmp/build2`
+1. **Extract verification builds**: `./diff-tools/extract-and-compare.sh builds/*/simple-app-build1.tar verify-simple-app.tar`
+2. **Compare layer contents**: `./diff-tools/compare-layer-contents.sh /tmp/build1 /tmp/verify`
 3. **Examine specific differences**: Look at the diff output to understand exactly what files changed
 4. **Fix and verify**: Re-add the missing component and confirm determinism returns
 
@@ -208,16 +208,16 @@ When experiments fail determinism:
 ### Common Issues
 
 - **Build not deterministic**: Check for version ranges, missing --ignore-scripts, or timestamp issues
-- **Snapshot not found**: Use probe-snapshot.sh to find valid dates
+- **Snapshot not found**: The smart probe automatically finds valid dates and updates package versions
 - **Remote verification fails**: Ensure Docker buildx and dependencies are installed
 
 ### Debug Commands
 
 ```bash
 # Compare two image tars manually
-tar -tf build1.tar | sort > build1.files
-tar -tf build2.tar | sort > build2.files
-diff build1.files build2.files
+tar -tf builds/*/simple-app-build1.tar | sort > build1.files
+tar -tf verify-simple-app.tar | sort > verify.files
+diff build1.files verify.files
 
 # Check package versions in built image
 docker run --rm your-image dpkg -l
@@ -284,9 +284,8 @@ dstack/get-deployed-salt.sh app_YOUR_APP_ID
 
 #### 2. Deploy to DStack
 ```bash
-# First push image to registry (if not already done)
-docker tag simple-det-app:HASH socrates1024/simple-det-app:HASH
-docker push socrates1024/simple-det-app:HASH
+# Push to registry using automated script
+./dstack/push-to-registry.sh builds/simple-det-app-YYYYMMDD-hash/build-manifest.json docker.io/socrates1024
 
 # Deploy using the build manifest
 ./dstack/deploy-to-dstack.sh builds/simple-det-app-YYYYMMDD-hash/build-manifest.json
