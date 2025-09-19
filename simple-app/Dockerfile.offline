@@ -11,11 +11,12 @@ ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} \
     TZ=UTC \
     npm_config_cache=/npm-cache
 
-# Use snapshot repositories
-RUN echo "🌐 ONLINE MODE: Using snapshot repositories" && \
-    echo "deb http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT} bookworm main" > /etc/apt/sources.list && \
-    echo "deb http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT} bookworm-updates main" >> /etc/apt/sources.list && \
-    echo "deb http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT} bookworm-security main" >> /etc/apt/sources.list && \
+# Copy vendor packages for offline use
+COPY vendor /vendor
+
+# Use vendored APT packages
+RUN echo "🔌 OFFLINE MODE: Using vendored packages" && \
+    echo "deb [trusted=yes] file:/vendor/apt ./" > /etc/apt/sources.list && \
     apt-get -o Acquire::Check-Valid-Until=false update && \
     apt-get install -y --no-install-recommends curl && \
     rm -rf /var/lib/apt/lists/* && \
@@ -26,13 +27,15 @@ RUN echo "🌐 ONLINE MODE: Using snapshot repositories" && \
 
 WORKDIR /app
 
-COPY package*.json ./
+COPY simple-app/package*.json ./
 
-RUN echo "🌐 ONLINE MODE: Using npm registry" && \
-    npm ci --omit=dev --ignore-scripts && \
-    find /app -exec touch -d "@${SOURCE_DATE_EPOCH}" {} +
+RUN echo "🔌 OFFLINE MODE: Using vendored npm packages" && \
+    for f in /vendor/npm/*.tgz; do npm cache add "$f"; done && \
+    npm ci --omit=dev --ignore-scripts --offline && \
+    find /app -exec touch -d "@${SOURCE_DATE_EPOCH}" {} + && \
+    rm -rf /npm-cache
 
-COPY server.js ./
+COPY simple-app/server.js ./
 
 EXPOSE 3000
 CMD ["node", "server.js"]

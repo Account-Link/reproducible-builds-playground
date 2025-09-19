@@ -54,6 +54,19 @@ sed -i "s/DEBIAN_SNAPSHOT: \"\"/DEBIAN_SNAPSHOT: \"$SNAPSHOT_DATE\"/" "$COMPOSE_
 
 BUILD_ARGS="--build-arg SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH --build-arg DEBIAN_SNAPSHOT=$SNAPSHOT_DATE"
 
+# Auto-detect build mode based on vendor directory
+if [[ -d "$ROOT/vendor" ]]; then
+  echo "🔌 Auto-detected vendored dependencies - building in OFFLINE mode"
+  BUILD_CONTEXT="$ROOT"  # Use root as context to access vendor/
+  APP_PATH="simple-app"
+  DOCKERFILE="Dockerfile.offline"
+else
+  echo "🌐 No vendor directory found - building in ONLINE mode"
+  BUILD_CONTEXT="$OUTPUT_DIR/simple-app"
+  APP_PATH="."
+  DOCKERFILE="Dockerfile"
+fi
+
 # Build once, then use verify script for determinism check
 echo "🔨 Building image (initial build)"
 docker builder prune -af >/dev/null
@@ -61,19 +74,19 @@ docker builder prune -af >/dev/null
 # First build with rewrite-timestamp to OCI for deterministic hash
 SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" docker buildx build \
   $BUILD_ARGS \
-  -f "$OUTPUT_DIR/simple-app/Dockerfile" \
+  -f "$BUILD_CONTEXT/$APP_PATH/$DOCKERFILE" \
   --output type=oci,dest="$OUTPUT_DIR/simple-app-build1.tar",rewrite-timestamp=true \
-  "$OUTPUT_DIR/simple-app"
+  "$BUILD_CONTEXT"
 
 HASH1=$(sha256sum "$OUTPUT_DIR/simple-app-build1.tar" | awk '{print $1}')
 
 # Also build and load into Docker for easy pushing
 SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" docker buildx build \
   $BUILD_ARGS \
-  -f "$OUTPUT_DIR/simple-app/Dockerfile" \
+  -f "$BUILD_CONTEXT/$APP_PATH/$DOCKERFILE" \
   --load \
   --tag "simple-det-app:$HASH1" \
-  "$OUTPUT_DIR/simple-app"
+  "$BUILD_CONTEXT"
 
 # Generate build manifest
 cat > "$OUTPUT_DIR/build-manifest.json" << EOF

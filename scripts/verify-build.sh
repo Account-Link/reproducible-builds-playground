@@ -44,6 +44,31 @@ echo "[verify] Creating temporary build environment"
 # Copy app source to temp directory
 cp -r simple-app/ "$TEMP_DIR/"
 
+# Check build mode - auto-detect or force offline for network isolation testing
+if [[ "${OFFLINE:-}" == "1" ]]; then
+  if [[ ! -d "vendor" ]]; then
+    echo "❌ OFFLINE=1 specified but vendor/ directory not found"
+    echo "   Run: ./scripts/vendor-dependencies.sh"
+    exit 1
+  fi
+  echo "[verify] OFFLINE=1 specified - forcing network isolation test"
+  cp -r vendor/ "$TEMP_DIR/"
+  BUILD_CONTEXT="$TEMP_DIR"
+  APP_PATH="simple-app"
+  DOCKERFILE="Dockerfile.offline"
+elif [[ -d "vendor" ]]; then
+  echo "[verify] Auto-detected vendored dependencies - using offline mode"
+  cp -r vendor/ "$TEMP_DIR/"
+  BUILD_CONTEXT="$TEMP_DIR"
+  APP_PATH="simple-app"
+  DOCKERFILE="Dockerfile.offline"
+else
+  echo "[verify] No vendor directory - using online mode"
+  BUILD_CONTEXT="$TEMP_DIR/simple-app"
+  APP_PATH="."
+  DOCKERFILE="Dockerfile"
+fi
+
 # Define build arguments
 BUILD_ARGS="--build-arg SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH --build-arg DEBIAN_SNAPSHOT=$DEBIAN_SNAPSHOT"
 
@@ -56,9 +81,9 @@ echo "[verify] Rebuilding with identical parameters (no cache)"
 SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" docker buildx build \
   $BUILD_ARGS \
   --no-cache \
-  -f "$TEMP_DIR/simple-app/Dockerfile" \
+  -f "$BUILD_CONTEXT/$APP_PATH/$DOCKERFILE" \
   --output type=oci,dest="$ROOT/verify-simple-app.tar",rewrite-timestamp=true \
-  "$TEMP_DIR/simple-app"
+  "$BUILD_CONTEXT"
 
 # Compare hashes
 ACTUAL_HASH=$(sha256sum verify-simple-app.tar | awk '{print $1}')

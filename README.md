@@ -27,7 +27,29 @@ This will:
 
 This rebuilds the container with identical parameters using `--no-cache` and confirms it matches the expected hash.
 
-### 3. Test on Remote Machine
+### 3. Create Vendor Package (Optional - Protects Against Bitrot)
+```bash
+./scripts/vendor-dependencies.sh
+```
+
+This downloads and caches APT and npm dependencies locally, protecting against future package availability issues:
+- **APT packages**: Downloaded from current snapshot and stored in `vendor/apt/`
+- **npm packages**: Downloaded as tarballs and stored in `vendor/npm/`
+- **Automatic detection**: Build scripts auto-detect vendor directory and use offline mode
+
+Benefits:
+- **Bitrot protection**: Dependencies remain available even if repositories change
+- **Network isolation**: Builds work completely offline with `OFFLINE=1`
+- **Audit capability**: All dependencies are stored locally for security review
+
+### 4. Test Network Isolation
+```bash
+OFFLINE=1 ./scripts/verify-build.sh builds/simple-det-app-YYYYMMDD-hash/build-manifest.json
+```
+
+This forces network isolation during verification to prove the build works offline using only vendored dependencies.
+
+### 5. Test on Remote Machine
 ```bash
 ./scripts/test-remote.sh user@remote-host builds/simple-det-app-YYYYMMDD-hash/build-manifest.json
 ```
@@ -35,6 +57,28 @@ This rebuilds the container with identical parameters using `--no-cache` and con
 This copies the verification script to a remote machine and runs it there to prove the build is deterministic across different environments.
 
 ## What Makes Builds Deterministic
+
+### Build Mode Auto-Detection
+
+The build system automatically detects whether to build online or offline based on the presence of vendored dependencies:
+
+- **Online Mode**: `./scripts/build-deterministic.sh` (when no `vendor/` directory exists)
+  - Uses Debian snapshot repositories and npm registry
+  - Downloads fresh packages from internet sources
+
+- **Offline Mode**: Automatic when `vendor/` directory exists
+  - Uses locally cached APT packages from `vendor/apt/`
+  - Uses locally cached npm tarballs from `vendor/npm/`
+  - Builds work without network access
+
+- **Network Isolation Testing**: `OFFLINE=1 ./scripts/verify-build.sh`
+  - Forces offline mode for verification even with network available
+  - Proves builds work completely offline using only vendored dependencies
+
+Both modes produce identical deterministic results. The offline mode protects against:
+- **Package disappearance**: Dependencies remain available locally
+- **Repository downtime**: No network dependency for builds
+- **Supply chain attacks**: All dependencies are pre-audited and cached
 
 ### Critical Components
 
@@ -84,7 +128,8 @@ The following steps are ESSENTIAL for achieving reproducible builds. Remove any 
 ### Files
 
 **Application:**
-- `simple-app/Dockerfile` - Demonstrates proper deterministic Dockerfile patterns
+- `simple-app/Dockerfile` - Online mode: uses snapshot repositories and npm registry
+- `simple-app/Dockerfile.offline` - Offline mode: uses vendored packages
 - `simple-app/package.json` - Shows exact version pinning
 - `simple-app/server.js` - Simple Express app that uses curl
 
@@ -92,8 +137,9 @@ The following steps are ESSENTIAL for achieving reproducible builds. Remove any 
 - `docker-compose.yml` - Unified compose file with build args for deterministic builds
 
 **Deterministic Build Scripts:**
-- `scripts/build-deterministic.sh` - Core build script with verification
-- `scripts/verify-build.sh` - Independent verification script
+- `scripts/build-deterministic.sh` - Core build script with auto-detection and verification
+- `scripts/verify-build.sh` - Independent verification script with network isolation testing
+- `scripts/vendor-dependencies.sh` - Downloads and caches dependencies for offline builds
 - `scripts/smart-probe-snapshot.sh` - Intelligently finds working Debian snapshot dates and package versions
 - `scripts/test-remote.sh` - Tests verification on remote machines
 
