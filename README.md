@@ -15,17 +15,17 @@ This practice folder contains a minimal Node.js app with both npm dependencies (
 
 This will:
 - Create a timestamped build in `builds/`
-- Generate deterministic docker-compose and app-compose configurations
-- Build the container twice with identical parameters
+- Generate deterministic docker-compose configurations
+- Build the container once and verify with `--no-cache` rebuild
 - Verify both builds produce identical hashes
-- Generate a complete build manifest for verification
+- Generate a minimal build manifest for verification
 
 ### 2. Verify a Build
 ```bash
 ./scripts/verify-build.sh builds/simple-det-app-YYYYMMDD-hash/build-manifest.json
 ```
 
-This rebuilds the container with identical parameters (but no and confirms it matches the expected hash.
+This rebuilds the container with identical parameters using `--no-cache` and confirms it matches the expected hash.
 
 ### 3. Test on Remote Machine
 ```bash
@@ -112,9 +112,8 @@ The following steps are ESSENTIAL for achieving reproducible builds. Remove any 
 
 - Docker with BuildKit enabled
 - `jq` for JSON processing
-- Python 3 with `pyyaml` for compose hash generation
 - SSH access to remote machines (for remote testing)
-- Phala Cloud api key (for Dstack deployment testing)
+- Phala Cloud CLI and authentication (for DStack deployment)
 
 ### Docker BuildKit Setup
 
@@ -122,6 +121,16 @@ The following steps are ESSENTIAL for achieving reproducible builds. Remove any 
 # Create buildx builder
 docker buildx create --name mybuilder --driver docker-container --use
 docker buildx inspect --bootstrap
+```
+
+### Phala Cloud CLI Setup
+
+```bash
+# Install Phala Cloud CLI
+npm install -g @phala/cloud-cli
+
+# Authenticate
+phala auth login
 ```
 
 ## Experimental Playground
@@ -268,15 +277,19 @@ dstack/get-deployed-salt.sh app_YOUR_APP_ID
 ./scripts/build-deterministic.sh
 
 # This creates a timestamped build directory with:
-# - build-manifest.json (build metadata)
-# - docker images (build1.tar, build2.tar)
+# - build-manifest.json (minimal verification parameters)
+# - simple-app-build1.tar (OCI image archive)
 # - docker-compose-deploy.yml (deployment configuration)
 ```
 
 #### 2. Deploy to DStack
 ```bash
+# First push image to registry (if not already done)
+docker tag simple-det-app:HASH socrates1024/simple-det-app:HASH
+docker push socrates1024/simple-det-app:HASH
+
 # Deploy using the build manifest
-./scripts/deploy-to-dstack.sh builds/simple-det-app-YYYYMMDD-hash/build-manifest.json
+./dstack/deploy-to-dstack.sh builds/simple-det-app-YYYYMMDD-hash/build-manifest.json
 
 # Or manually using phala CLI:
 cd builds/simple-det-app-YYYYMMDD-hash/
@@ -300,21 +313,21 @@ dstack/verify-deployment.sh app_YOUR_APP_ID builds/simple-det-app-YYYYMMDD-hash/
 
 **Hash Mismatch Issues:**
 ```bash
-# Check your generated hash
-cat builds/*/compose-hash.txt
+# Check your image hash from manifest
+jq -r '.expected_hash' builds/*/build-manifest.json
 
-# Regenerate if needed
-python3 scripts/get-compose-hash.py docker-compose-deploy.yml
+# Verify the pushed image matches
+docker images | grep simple-det-app
 
-# Compare with downloaded app-compose from DStack
-diff app-compose-generated.json downloaded-app-compose.json
+# Compare with deployed configuration
+phala cvms list
 ```
 
 **Common deployment issues:**
-- App compose hash mismatch (most common)
 - Docker image not pushed to accessible registry
 - Invalid docker-compose syntax for DStack
-- Missing required DStack fields (name, features, etc.)
+- Missing Phala Cloud authentication
+- Network connectivity to DStack nodes
 
 ### DStack Configuration Format
 

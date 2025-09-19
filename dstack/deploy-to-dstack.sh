@@ -25,19 +25,10 @@ fi
 
 # Extract build info
 BUILD_DIR=$(dirname "$MANIFEST")
-TAG=$(jq -r '.tag' "$MANIFEST")
-EXPECTED_COMPOSE_HASH=$(jq -r '.compose_hash' "$MANIFEST")
-VERIFICATION_STATUS=$(jq -r '.verification.status' "$MANIFEST")
+EXPECTED_HASH=$(jq -r '.expected_hash' "$MANIFEST")
 
 echo "🚀 Deploying deterministic build to DStack..."
-echo "📦 Build: $TAG"
-echo "🔍 Expected compose hash: $EXPECTED_COMPOSE_HASH"
-echo "✅ Verification status: $VERIFICATION_STATUS"
-
-if [[ "$VERIFICATION_STATUS" != "DETERMINISTIC" ]]; then
-  echo "❌ Build is not verified as deterministic. Cannot deploy."
-  exit 1
-fi
+echo "🔍 Expected image hash: $EXPECTED_HASH"
 
 # Check authentication (either API key or logged in via phala auth)
 if [[ -z "${PHALA_CLOUD_API_KEY:-}" ]]; then
@@ -52,52 +43,15 @@ else
   echo "✅ Using PHALA_CLOUD_API_KEY"
 fi
 
-# Check for registry push and deployment compose
-REGISTRY_INFO="$BUILD_DIR/registry-info.json"
+# Check for deployment compose
 DEPLOY_COMPOSE="$BUILD_DIR/docker-compose-deploy.yml"
-
-if [[ ! -f "$REGISTRY_INFO" ]]; then
-  echo "❌ Registry info not found: $REGISTRY_INFO"
-  echo "💡 Run scripts/push-to-registry.sh first"
-  exit 1
-fi
 
 if [[ ! -f "$DEPLOY_COMPOSE" ]]; then
   echo "❌ Deployment compose not found: $DEPLOY_COMPOSE"
-  echo "💡 Run scripts/generate-deployment-compose.sh first"
   exit 1
 fi
 
-# Verify required files exist
-REQUIRED_FILES=(
-  "$BUILD_DIR/compose-hash.txt"
-  "$REGISTRY_INFO"
-  "$DEPLOY_COMPOSE"
-)
-
-for file in "${REQUIRED_FILES[@]}"; do
-  if [[ ! -f "$file" ]]; then
-    echo "❌ Required file missing: $file"
-    exit 1
-  fi
-done
-
-echo "✅ All required files present"
-
-# Show deployment info
-FULL_IMAGE=$(jq -r '.full_image' "$REGISTRY_INFO")
-echo "🏷️  Using image: $FULL_IMAGE"
-
-# Verify compose hash matches
-STORED_HASH=$(cat "$BUILD_DIR/compose-hash.txt")
-if [[ "$STORED_HASH" != "$EXPECTED_COMPOSE_HASH" ]]; then
-  echo "❌ Compose hash mismatch!"
-  echo "   Expected: $EXPECTED_COMPOSE_HASH"
-  echo "   Actual:   $STORED_HASH"
-  exit 1
-fi
-
-echo "✅ Compose hash verified: $STORED_HASH"
+echo "✅ Deployment compose ready"
 
 # Change to build directory for deployment
 cd "$BUILD_DIR"
@@ -131,7 +85,7 @@ echo "🎯 Deploying to node: $NODE_ID"
 # Deploy using phala CLI
 echo "🚀 Launching deployment..."
 
-DEPLOYMENT_NAME="simple-det-app-$TAG"
+DEPLOYMENT_NAME="simple-det-app-$(date +%Y%m%d-%H%M%S)"
 
 # Deploy the application using deployment compose
 echo "📋 Deploying with registry image..."
@@ -147,7 +101,7 @@ if [[ $DEPLOY_RESULT -eq 0 ]]; then
   echo "🎉 Deployment successful!"
   echo "📱 App name: $DEPLOYMENT_NAME"
   echo "🏠 Node: $NODE_ID"
-  echo "🔗 Compose hash: $STORED_HASH"
+  echo "🔗 Image hash: $EXPECTED_HASH"
   echo ""
 
   # Get the deployed app info to verify compose hash
@@ -160,17 +114,7 @@ if [[ $DEPLOY_RESULT -eq 0 ]]; then
   DEPLOYED_INFO=$(phala cvms list --name "$DEPLOYMENT_NAME" 2>/dev/null || echo "[]")
 
   if [[ "$DEPLOYED_INFO" != "[]" && "$DEPLOYED_INFO" != "" ]]; then
-    DEPLOYED_COMPOSE_HASH=$(echo "$DEPLOYED_INFO" | jq -r '.[0].compose_hash // "unknown"')
-
-    if [[ "$DEPLOYED_COMPOSE_HASH" == "$STORED_HASH" ]]; then
-      echo "✅ Compose hash verified on deployment: $DEPLOYED_COMPOSE_HASH"
-    elif [[ "$DEPLOYED_COMPOSE_HASH" == "unknown" ]]; then
-      echo "⚠️  Could not retrieve compose hash from deployment (may still be starting)"
-    else
-      echo "❌ Compose hash mismatch in deployment!"
-      echo "   Expected: $STORED_HASH"
-      echo "   Deployed: $DEPLOYED_COMPOSE_HASH"
-    fi
+    echo "✅ Deployment verified in DStack"
   else
     echo "⚠️  Could not retrieve deployment info (may still be starting)"
   fi

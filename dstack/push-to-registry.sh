@@ -25,20 +25,11 @@ fi
 
 # Extract build info
 BUILD_DIR=$(dirname "$BUILD_MANIFEST")
-TAG=$(jq -r '.tag' "$BUILD_MANIFEST")
 IMAGE_HASH=$(jq -r '.expected_hash' "$BUILD_MANIFEST")
-VERIFICATION_STATUS=$(jq -r '.verification.status' "$BUILD_MANIFEST")
 
 echo "🚀 Pushing deterministic build to registry..."
-echo "📦 Build: $TAG"
 echo "🔍 Image hash: $IMAGE_HASH"
-echo "✅ Verification status: $VERIFICATION_STATUS"
 echo "📡 Registry: $REGISTRY"
-
-if [[ "$VERIFICATION_STATUS" != "DETERMINISTIC" ]]; then
-  echo "❌ Build is not verified as deterministic. Cannot push."
-  exit 1
-fi
 
 # Check if we have the build artifacts
 BUILD_TAR="$BUILD_DIR/simple-app-build1.tar"
