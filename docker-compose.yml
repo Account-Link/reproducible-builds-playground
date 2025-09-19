@@ -1,0 +1,11 @@
+services:
+  simple-det-app:
+    build:
+      context: .
+      dockerfile: simple-app/Dockerfile
+      args:
+        SOURCE_DATE_EPOCH: ""
+        DEBIAN_SNAPSHOT: ""
+    ports:
+      - "3000:3000"
+    restart: "no"

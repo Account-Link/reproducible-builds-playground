@@ -1,0 +1,5 @@
+builds/
+*.tar
+verify-*.tar
+node_modules/
+.npm-cache/
