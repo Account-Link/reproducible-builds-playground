@@ -26,15 +26,11 @@ cd "$ROOT"
 echo "🔍 Verifying deterministic build using manifest: $MANIFEST"
 
 # Parse manifest
-TAG=$(jq -r '.tag' "$MANIFEST")
-GIT_COMMIT=$(jq -r '.git_commit' "$MANIFEST")
 SOURCE_DATE_EPOCH=$(jq -r '.build_parameters.source_date_epoch' "$MANIFEST")
 DEBIAN_SNAPSHOT=$(jq -r '.build_parameters.debian_snapshot' "$MANIFEST")
 EXPECTED_HASH=$(jq -r '.expected_hash' "$MANIFEST")
 
-echo "📋 Manifest details:"
-echo "  Tag: $TAG"
-echo "  Git commit: $GIT_COMMIT"
+echo "📋 Build parameters:"
 echo "  SOURCE_DATE_EPOCH: $SOURCE_DATE_EPOCH"
 echo "  DEBIAN_SNAPSHOT: $DEBIAN_SNAPSHOT"
 echo "  Expected hash: $EXPECTED_HASH"

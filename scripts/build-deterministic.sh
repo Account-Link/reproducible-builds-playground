@@ -64,26 +64,14 @@ SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" docker buildx build \
 
 HASH1=$(sha256sum "$OUTPUT_DIR/simple-app-build1.tar" | awk '{print $1}')
 
-# Generate build manifest first (with initial status)
+# Generate build manifest
 cat > "$OUTPUT_DIR/build-manifest.json" << EOF
 {
-  "tag": "${TAG}",
-  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "git_commit": "$(if git rev-parse --verify HEAD >/dev/null 2>&1; then git rev-parse HEAD; else echo "no-commits"; fi)",
   "build_parameters": {
     "source_date_epoch": "$SOURCE_DATE_EPOCH",
-    "debian_snapshot": "$SNAPSHOT_DATE",
-    "base_image": "$BASE_IMG"
+    "debian_snapshot": "$SNAPSHOT_DATE"
   },
-  "expected_hash": "$HASH1",
-  "verification": {
-    "status": "PENDING"
-  },
-  "dstack_info": {
-    "app_compose_file": "app-compose-generated.json",
-    "docker_compose_file": "docker-compose.yml",
-    "note": "app-compose hash computed server-side by DStack during deployment"
-  }
+  "expected_hash": "$HASH1"
 }
 EOF
 
@@ -104,8 +92,7 @@ else
   STATUS="NON-DETERMINISTIC"
 fi
 
-# Update build manifest with final status
-jq ".verification.status = \"$STATUS\"" "$OUTPUT_DIR/build-manifest.json" > "$OUTPUT_DIR/build-manifest.tmp" && mv "$OUTPUT_DIR/build-manifest.tmp" "$OUTPUT_DIR/build-manifest.json"
+# No need to update manifest - it contains only what's needed for verification
 
 # Generate deployment artifacts (only if deterministic)
 if [[ "$STATUS" == "DETERMINISTIC" ]]; then

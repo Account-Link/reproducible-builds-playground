@@ -16,7 +16,6 @@ This practice folder contains a minimal Node.js app with both npm dependencies (
 This will:
 - Create a timestamped build in `builds/`
 - Generate deterministic docker-compose and app-compose configurations
-- Calculate DStack-compatible compose hash
 - Build the container twice with identical parameters
 - Verify both builds produce identical hashes
 - Generate a complete build manifest for verification
@@ -26,7 +25,7 @@ This will:
 ./scripts/verify-build.sh builds/simple-det-app-YYYYMMDD-hash/build-manifest.json
 ```
 
-This rebuilds the container with identical parameters and confirms it matches the expected hash.
+This rebuilds the container with identical parameters (but no and confirms it matches the expected hash.
 
 ### 3. Test on Remote Machine
 ```bash
@@ -34,13 +33,6 @@ This rebuilds the container with identical parameters and confirms it matches th
 ```
 
 This copies the verification script to a remote machine and runs it there to prove the build is deterministic across different environments.
-
-### 4. Deploy to DStack
-```bash
-./dstack/deploy-to-dstack.sh builds/simple-det-app-YYYYMMDD-hash/build-manifest.json
-```
-
-This prepares a DStack deployment package with the verified deterministic build and compose hash.
 
 ## What Makes Builds Deterministic
 
@@ -122,6 +114,7 @@ The following steps are ESSENTIAL for achieving reproducible builds. Remove any 
 - `jq` for JSON processing
 - Python 3 with `pyyaml` for compose hash generation
 - SSH access to remote machines (for remote testing)
+- Phala Cloud api key (for Dstack deployment testing)
 
 ### Docker BuildKit Setup
 
@@ -347,13 +340,3 @@ The app-compose format includes DStack-specific metadata:
     "tproxy_enabled": true
 }
 ```
-
-Key fields:
-- `docker_compose_file`: Your complete docker-compose.yml content
-- `features`: DStack features required (KMS, network proxy)
-- `pre_launch_script`: Standardized startup script for credentials and cleanup
-- `salt`: Fixed value for deterministic hash calculation
-
-## Related Documentation
-
-See the main `audit-tools/README.md` for the full production system that inspired this practice environment.
