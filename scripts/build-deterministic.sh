@@ -106,16 +106,9 @@ if [[ "$STATUS" == "DETERMINISTIC" ]]; then
 
   echo "📄 Generated deployment compose with placeholder image"
 
-  # Generate app-compose hash based on deployment compose
-  echo "📄 Generating app-compose hash from deployment compose"
-  cd "$OUTPUT_DIR"
-  python3 "$ROOT/dstack/get-compose-hash.py" docker-compose-deploy.yml
-  COMPOSE_HASH=$(cat compose-hash.txt)
-  cd "$ROOT"
-
-  echo "✅ App-compose hash: $COMPOSE_HASH"
-else
-  COMPOSE_HASH="null"
+  # Note: App-compose hash is generated server-side by DStack during deployment
+  # The salt is randomly generated, so we cannot predict the hash locally
+  echo "📄 Deployment compose ready for DStack (hash will be computed server-side)"
 fi
 
 # Generate build manifest
@@ -130,14 +123,13 @@ cat > "$OUTPUT_DIR/build-manifest.json" << EOF
     "base_image": "$BASE_IMG"
   },
   "expected_hash": "$HASH1",
-  "compose_hash": $(if [[ "$COMPOSE_HASH" == "null" ]]; then echo "null"; else echo "\"$COMPOSE_HASH\""; fi),
   "verification": {
     "status": "$STATUS"
   },
   "dstack_info": {
     "app_compose_file": "app-compose-generated.json",
-    "compose_hash": "$COMPOSE_HASH",
-    "docker_compose_file": "docker-compose.yml"
+    "docker_compose_file": "docker-compose.yml",
+    "note": "app-compose hash computed server-side by DStack during deployment"
   }
 }
 EOF
@@ -146,21 +138,20 @@ echo ""
 if [[ "$STATUS" == "DETERMINISTIC" ]]; then
   echo "🎉 DETERMINISTIC BUILD SUCCESS"
   echo "📦 Image hash: $HASH1"
-  echo "📄 Compose hash: $COMPOSE_HASH"
   echo "📋 Manifest: $OUTPUT_DIR/build-manifest.json"
   echo ""
   echo "📁 Generated files:"
   echo "  📄 $OUTPUT_DIR/docker-compose.yml - Build compose with deterministic args"
   echo "  📄 $OUTPUT_DIR/docker-compose-deploy.yml - Deployment compose with image references"
-  echo "  📄 $OUTPUT_DIR/app-compose-generated.json - DStack app-compose configuration"
-  echo "  📄 $OUTPUT_DIR/compose-hash.txt - Deterministic compose hash"
+  echo "  📄 $OUTPUT_DIR/app-compose-generated.json - DStack app-compose configuration (template)"
   echo "  📋 $OUTPUT_DIR/build-manifest.json - Complete build metadata"
   echo ""
   echo "🔍 To verify independently:"
   echo "  scripts/verify-build.sh $OUTPUT_DIR/build-manifest.json"
   echo ""
   echo "🚀 For DStack deployment:"
-  echo "  App compose hash: $COMPOSE_HASH"
+  echo "  Use: dstack/deploy-to-dstack.sh $OUTPUT_DIR/build-manifest.json"
+  echo "  Note: App-compose hash will be computed server-side during deployment"
 else
   echo "💥 DETERMINISTIC BUILD FAILED"
   exit 1

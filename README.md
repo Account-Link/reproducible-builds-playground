@@ -110,6 +110,8 @@ The following steps are ESSENTIAL for achieving reproducible builds. Remove any 
 
 **DStack Integration:**
 - `dstack/get-compose-hash.py` - Generates DStack-compatible compose hashes
+- `dstack/get-deployed-salt.sh` - Extracts salt from deployed DStack instances
+- `dstack/verify-deployment.sh` - Complete deployment verification workflow
 - `dstack/deploy-to-dstack.sh` - Prepares DStack deployment packages
 - `dstack/push-to-registry.sh` - Registry push utilities
 - `dstack/verify-deployed-hash.py` - Verifies deployed app-compose matches local build
@@ -207,39 +209,43 @@ docker run --rm your-image npm list --depth=0
 The app compose hash is a critical component for verifying deterministic builds in DStack. It ensures that the configuration used to deploy your application matches exactly what you tested during development.
 
 **How it works:**
-1. **App Compose Generation**: Your `docker-compose.yml` is converted to DStack's app-compose format using `dstack/get-compose-hash.py`
-2. **Hash Calculation**: A SHA256 hash is calculated from the complete app-compose JSON (including pre-launch scripts, security settings, and compose content)
-3. **Verification**: The hash must match between your local build and the deployed instance (using the deployed salt)
+1. **Local Build**: Creates deterministic Docker images and deployment configurations
+2. **DStack Deployment**: DStack converts your `docker-compose.yml` to app-compose format and generates a random salt server-side
+3. **Post-Deployment Verification**: Extract the deployed salt and verify our local compose generates the same hash
 
-#### Quick Reference: Finding Your Compose Hash
+**Key insight:** The salt is generated randomly by DStack during deployment, so we cannot predict the final hash during the build phase.
 
-**After running `./scripts/build-deterministic.sh`:**
+#### Corrected Workflow: Post-Deployment Verification
+
+**Step 1: Build deterministically**
 ```bash
-# The compose hash is in the build output directory:
-cat builds/simple-det-app-*/compose-hash.txt
-
-# Or generate it manually from any deployment compose:
-python3 dstack/get-compose-hash.py builds/simple-det-app-*/docker-compose-deploy.yml
+./scripts/build-deterministic.sh
+# Creates: docker images, docker-compose-deploy.yml, build manifest
+# Note: No app-compose hash generated (salt is unknown until deployment)
 ```
 
-**During deployment verification:**
+**Step 2: Deploy to DStack**
 ```bash
-# 1. Deploy your application:
 cd builds/simple-det-app-*/
 phala deploy -c docker-compose-deploy.yml -n simple-det-app-verification
-
-# 2. Download deployed app-compose (wait 2-3 minutes after deployment):
-phala cvms get YOUR_APP_ID --json | tail -n +4 > deployed-app-compose.json
-
-# 3. Verify hash matches using deployed salt:
-python3 ../../dstack/verify-deployed-hash.py docker-compose-deploy.yml deployed-app-compose.json
-# Output: ✅ HASH MATCH - Our compose generates same hash as deployed!
+# DStack generates random salt and computes final app-compose hash server-side
 ```
 
-**Files created by the hash generation:**
-- `compose-hash.txt` - **THE HASH** you need for verification
-- `app-compose-generated.json` - DStack-formatted configuration
-- `app-compose-deterministic.json` - Compact format for reference
+**Step 3: Verify deployment matches local build**
+```bash
+# Wait 2-3 minutes for deployment to complete, then:
+dstack/verify-deployment.sh app_YOUR_APP_ID builds/simple-det-app-*/build-manifest.json
+# Output: ✅ HASH MATCH - Our compose generates same hash as deployed!
+
+# Or extract just the salt for manual verification:
+dstack/get-deployed-salt.sh app_YOUR_APP_ID
+# Output: 6ed9e7827a294556a01d27d5d36004e2
+```
+
+**What this verification proves:**
+- Your local docker-compose content matches deployed version exactly
+- No configuration drift between development and production
+- DStack deployment process is deterministic (modulo the random salt)
 
 ### Deployment Instructions
 
@@ -251,8 +257,7 @@ python3 ../../dstack/verify-deployed-hash.py docker-compose-deploy.yml deployed-
 # This creates a timestamped build directory with:
 # - build-manifest.json (build metadata)
 # - docker images (build1.tar, build2.tar)
-# - app-compose configurations
-# - compose hash verification
+# - docker-compose-deploy.yml (deployment configuration)
 ```
 
 #### 2. Deploy to DStack
@@ -266,12 +271,13 @@ phala deploy -f docker-compose-deploy.yml --app-name simple-det-app-verification
 ```
 
 #### 3. Verify Deployment
-After deployment, DStack will:
-1. Generate its own app-compose hash from your uploaded configuration
-2. Compare it against your locally calculated hash
-3. Ensure the deployed configuration exactly matches your tested build
+After deployment, use our verification script:
+```bash
+# Extract deployed salt and verify hash matches local generation
+dstack/verify-deployment.sh app_YOUR_APP_ID builds/simple-det-app-YYYYMMDD-hash/build-manifest.json
+```
 
-**Hash verification ensures:**
+**This verification ensures:**
 - No configuration drift between development and production
 - Exact docker-compose content is deployed
 - Security settings and environment variables match exactly
