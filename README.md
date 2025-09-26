@@ -9,16 +9,23 @@ This practice folder contains a minimal Node.js app with both npm dependencies (
 ## Quick Start
 
 ### 1. Build Deterministically
+
+**Docker approach (using Debian snapshots):**
 ```bash
 ./scripts/build-deterministic.sh
 ```
 
-This will:
+**Nix approach (using Nix flakes):**
+```bash
+./scripts/build-deterministic-nix.sh
+```
+
+Both will:
 - Create a timestamped build in `builds/`
 - Generate deterministic docker-compose configurations
-- Build the container once and verify with `--no-cache` rebuild
-- Verify both builds produce identical hashes
-- Generate a minimal build manifest for verification
+- Build the container and verify determinism
+- Generate a build manifest for verification
+- Create deployment-ready artifacts
 
 ### 2. Verify a Build
 ```bash
@@ -137,11 +144,16 @@ The following steps are ESSENTIAL for achieving reproducible builds. Remove any 
 - `docker-compose.yml` - Unified compose file with build args for deterministic builds
 
 **Deterministic Build Scripts:**
-- `scripts/build-deterministic.sh` - Core build script with auto-detection and verification
+- `scripts/build-deterministic.sh` - Docker-based build script with auto-detection and verification
+- `scripts/build-deterministic-nix.sh` - Nix-based build script with verification
 - `scripts/verify-build.sh` - Independent verification script with network isolation testing
 - `scripts/vendor-dependencies.sh` - Downloads and caches dependencies for offline builds
 - `scripts/smart-probe-snapshot.sh` - Intelligently finds working Debian snapshot dates and package versions
 - `scripts/test-remote.sh` - Tests verification on remote machines
+
+**Nix Configuration:**
+- `flake.nix` - Nix flake configuration for reproducible builds
+- `flake.lock` - Pinned dependencies for Nix builds
 
 **Differential Analysis Tools:**
 - `diff-tools/extract-and-compare.sh` - Extract OCI layers for comparison
@@ -151,8 +163,8 @@ The following steps are ESSENTIAL for achieving reproducible builds. Remove any 
 - `dstack/get-compose-hash.py` - Generates DStack-compatible compose hashes
 - `dstack/get-deployed-salt.sh` - Extracts salt from deployed DStack instances
 - `dstack/verify-deployment.sh` - Complete deployment verification workflow
-- `dstack/deploy-to-dstack.sh` - Prepares DStack deployment packages
-- `dstack/push-to-registry.sh` - Registry push utilities
+- `dstack/deploy-to-dstack.sh` - Deploys to DStack with authentication and node selection
+- `dstack/push-to-registry.sh` - Registry push utilities (supports both Docker and Nix builds)
 - `dstack/verify-deployed-hash.py` - Verifies deployed app-compose matches local build
 
 ## Requirements
@@ -331,15 +343,11 @@ dstack/get-deployed-salt.sh app_YOUR_APP_ID
 
 #### 2. Deploy to DStack
 ```bash
-# Push to registry using automated script
+# Push to registry (automatically updates deployment compose)
 ./dstack/push-to-registry.sh builds/simple-det-app-YYYYMMDD-hash/build-manifest.json docker.io/socrates1024
 
 # Deploy using the build manifest
 ./dstack/deploy-to-dstack.sh builds/simple-det-app-YYYYMMDD-hash/build-manifest.json
-
-# Or manually using phala CLI:
-cd builds/simple-det-app-YYYYMMDD-hash/
-phala deploy -f docker-compose-deploy.yml --app-name simple-det-app-verification
 ```
 
 #### 3. Verify Deployment
