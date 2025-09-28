@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Debug: show available environment variables
+echo "Available mkosi variables:"
+env | grep -E "(SRCDIR|BUILDDIR|DESTDIR|SOURCE_DATE_EPOCH)" || true
+
+# Use safer variable access
+SRCDIR="${SRCDIR:-/work}"
+BUILDDIR="${BUILDDIR:-/tmp/build}"
+DESTDIR="${DESTDIR:-/buildroot}"
+
+echo "Using: SRCDIR=$SRCDIR BUILDDIR=$BUILDDIR DESTDIR=$DESTDIR"
+
+# Create build directory if it doesn't exist
+mkdir -p "$BUILDDIR"
+
+# Copy app sources into the build tree deterministically
+rsync -a --delete \
+  --exclude node_modules \
+  "$SRCDIR/simple-app/" "$BUILDDIR/app/"
+
+# Install npm dependencies with exact versions
+cd "$BUILDDIR/app"
+
+# Use vendored npm dependencies if available
+if [[ -d "$SRCDIR/vendor/npm" ]]; then
+  echo "🔌 OFFLINE MODE: Using vendored npm packages"
+  # Manually install express since it's the only dependency
+  # Create node_modules and extract the vendored express package
+  mkdir -p node_modules
+
+  # Find express tgz and extract it
+  EXPRESS_TGZ=$(find "$SRCDIR/vendor/npm" -name "express-*.tgz" | head -1)
+  if [[ -n "$EXPRESS_TGZ" ]]; then
+    echo "Installing express from: $EXPRESS_TGZ"
+    cd node_modules
+    tar -xzf "$EXPRESS_TGZ"
+    # Move from package/ directory to express/
+    if [[ -d package ]]; then
+      mv package express
+    fi
+
+    # Install express dependencies from vendor
+    cd express
+    mkdir -p node_modules
+    cd node_modules
+
+    # Extract all other vendor packages as potential express dependencies
+    for f in "$SRCDIR/vendor/npm"/*.tgz; do
+      BASENAME=$(basename "$f" .tgz)
+      if [[ "$BASENAME" != "express-"* ]]; then
+        tar -xzf "$f"
+        # Move from package/ to proper name
+        if [[ -d package ]]; then
+          PKG_NAME=$(basename "$f" .tgz | sed 's/-[0-9].*//')
+          mv package "$PKG_NAME" 2>/dev/null || true
+        fi
+      fi
+    done
+
+    cd "$BUILDDIR/app"
+    echo "✅ Manually installed express and dependencies"
+  else
+    echo "❌ Could not find express package in vendor"
+    exit 1
+  fi
+else
+  # Debug PATH and available executables
+  echo "Current PATH: $PATH"
+  echo "Checking for node/npm:"
+  find /usr -name "*npm*" -o -name "*node*" 2>/dev/null | head -10
+  # Try to set PATH and find npm
+  export PATH="/usr/bin:/usr/local/bin:/bin:$PATH"
+  NPM_PATH=$(which npm 2>/dev/null || find /usr -name npm -type f 2>/dev/null | head -1)
+  if [[ -n "$NPM_PATH" ]]; then
+    echo "Using npm at: $NPM_PATH"
+    "$NPM_PATH" ci --omit=dev --ignore-scripts
+  else
+    echo "npm not found, skipping npm install for now"
+  fi
+fi
+
+# Normalize mtimes for reproducibility
+find . -exec touch -d "2023-12-01 00:00:00 UTC" {} +
+
+# Install into the image root under /opt/app
+mkdir -p "$DESTDIR/opt/app"
+cp -a . "$DESTDIR/opt/app/"
+
+# Add a simple systemd service for bootable image
+mkdir -p "$DESTDIR/etc/systemd/system"
+cat > "$DESTDIR/etc/systemd/system/simple-app.service" <<'EOF'
+[Unit]
+Description=Simple deterministic app
+After=network-online.target
+
+[Service]
+WorkingDirectory=/opt/app
+ExecStart=/usr/bin/node /opt/app/server.js
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF

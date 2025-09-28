@@ -1,0 +1,34 @@
+FROM debian:bookworm-slim
+
+# Install dependencies and latest mkosi from GitHub
+RUN apt-get update && \
+    apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-venv \
+    systemd-container \
+    debootstrap \
+    debian-archive-keyring \
+    rsync \
+    git \
+    zstd \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /work
+
+# Install latest mkosi in venv
+RUN python3 -m venv venv && \
+    . venv/bin/activate && \
+    pip install git+https://github.com/systemd/mkosi.git
+
+# Copy mkosi config and build script
+COPY mkosi.conf .
+COPY mkosi.build .
+COPY simple-app/ simple-app/
+COPY vendor/ vendor/
+
+# Make build script executable
+RUN chmod +x mkosi.build
+
+# Run mkosi build with venv
+CMD ["/bin/bash", "-c", "source venv/bin/activate && mkosi -f build"]

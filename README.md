@@ -4,28 +4,39 @@ A simplified environment for learning and practicing deterministic Docker builds
 
 ## Overview
 
-This practice folder contains a minimal Node.js app with both npm dependencies (express) and apt packages (curl) to demonstrate deterministic build techniques. It's based on the patterns from the main audit-tools but simplified for learning.
+This practice folder contains a minimal Node.js app with both npm dependencies (express) and apt packages (curl) to demonstrate deterministic build techniques. Supports both Docker-based builds and mkosi OS image builds with DStack deployment.
 
 ## Quick Start
 
 ### 1. Build Deterministically
+
+**Docker approach:**
 ```bash
 ./scripts/build-deterministic.sh
 ```
 
-This will:
+**mkosi approach (OS images):**
+```bash
+./scripts/build-mkosi.sh
+```
+
+Both will:
 - Create a timestamped build in `builds/`
-- Generate deterministic docker-compose configurations
-- Build the container once and verify with `--no-cache` rebuild
+- Generate deterministic configurations
+- Build once and verify with rebuild
 - Verify both builds produce identical hashes
 - Generate a minimal build manifest for verification
 
 ### 2. Verify a Build
 ```bash
+# Docker builds
 ./scripts/verify-build.sh builds/simple-det-app-YYYYMMDD-hash/build-manifest.json
+
+# mkosi builds
+./scripts/verify-mkosi-build.sh builds/simple-mkosi-app-YYYYMMDD-hash/build-manifest.json
 ```
 
-This rebuilds the container with identical parameters using `--no-cache` and confirms it matches the expected hash.
+This rebuilds with identical parameters and confirms it matches the expected hash.
 
 ### 3. Create Vendor Package (Optional - Protects Against Bitrot)
 ```bash
@@ -137,8 +148,11 @@ The following steps are ESSENTIAL for achieving reproducible builds. Remove any 
 - `docker-compose.yml` - Unified compose file with build args for deterministic builds
 
 **Deterministic Build Scripts:**
-- `scripts/build-deterministic.sh` - Core build script with auto-detection and verification
-- `scripts/verify-build.sh` - Independent verification script with network isolation testing
+- `scripts/build-deterministic.sh` - Docker-based deterministic builds
+- `scripts/build-mkosi.sh` - mkosi-based OS image builds
+- `scripts/verify-build.sh` - Docker build verification
+- `scripts/verify-mkosi-build.sh` - mkosi build verification
+- `scripts/push-mkosi-to-registry.sh` - Registry push for mkosi builds
 - `scripts/vendor-dependencies.sh` - Downloads and caches dependencies for offline builds
 - `scripts/smart-probe-snapshot.sh` - Intelligently finds working Debian snapshot dates and package versions
 - `scripts/test-remote.sh` - Tests verification on remote machines
